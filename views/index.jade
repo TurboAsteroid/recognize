@@ -1,0 +1,41 @@
+extends layout
+
+block content
+  div.wraper
+    div#imagediv
+    div.container
+      div.app
+        a#start-camera.visible(href="#") Touch here to start the app.
+        video#camera-stream
+        video#camera-remote-stream
+        img#snap
+        p#error-message
+        div.controls
+          //a#delete-photo.disabled(href="#", title="Delete Photo")
+          //  i.material-icons delete
+          a#take-photo(href="#", title="Take Photo")
+            i.material-icons camera_alt
+          //a#download-photo.disabled(href="#", title="Save Photo", download="photo.png")
+          //  i.material-icons file_download
+        canvas
+    div.infotable
+      //div.cameraondiv
+      //  input(type="file", accept="image/png, image/jpeg")
+      //div.cameraondiv
+      //  button#cameraon Включить камеру
+      ul
+        li
+          b Фамилия
+          span.name1
+        li
+          b Имя
+          span.name2
+        li
+          b Отчество
+          span.name3
+        li
+          b Должность
+          span.position
+    div.buttons
+      button.sendYes(param="success") Верно
+      button.sendNo(param="error") Ошибка

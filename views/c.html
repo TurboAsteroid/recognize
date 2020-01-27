@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="./node_modules/jquery/dist/jquery.js"></script>
+    <script src="./socket.io/socket.io.js"></script>
+    <script src="./js/RTCMultiConnection.min.js"></script>
+    <script src="./js/getHTMLMediaElement.js"></script>
+    <link rel='stylesheet' href='/css/kamera.css'/>
+</head>
+<body>
+    <div class="header">
+        Контроль доуступа
+    </div>
+    <div class="wraper">
+        <div class="card card_photo">
+            <div class="card_title">
+                Распознавание
+            </div>
+            <div class="app card_block">
+                <video id="camera-stream"></video>
+                <div class="controls">
+                    <a id="take-photo" href="#" title="Take Photo">
+                        <i class="material-icons">camera_alt</i>
+                        <br>
+                        Сделать снимок
+                    </a>
+                </div>
+                <canvas />
+            </div>
+        </div>
+        <div class="card infotable">
+            <div class="card_title">
+                Объект контроля
+            </div>
+            <div id="imagediv" class="card_block"></div>
+            <div class="card_content">
+                <div class="about">
+                    <b>Фамилия:</b> <span class="last_name"></span><br>
+                    <b>Имя:</b> <span class="first_name"></span><br>
+                    <b>Отчество:</b> <span class="StoreName7"></span><br>
+                    <b>Должность:</b> <span class="StoreName8"></span><br>
+                </div>
+                <div class="about buttons">
+                    <button class="sendYes" param="success">Верно</button>
+                    <button class="sendNo" param="error">Ошибка</button>
+                </div>
+                <div class="about">
+                    <b>Нарушений:</b> <span class="">0</span><br>
+                    <b>Опозданий:</b> <span class="">0</span><br>
+                    <b>Отметки:</b> <span class="">Специальные отметки</span><br>
+                </div>
+            </div>
+        </div>
+        <div class="card card_stat">
+            <div class="card_title">
+                Отметки контроля
+            </div>
+            <div class="card_content">
+                <table cellspacing="0" cellpadding="0" border="0">
+                    <colgroup>
+                        <col width="125px">
+                        <col width="200px">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <td>Дата и время</td>
+                            <td>Контрольная точка</td>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(function() {
+            var localstream;
+            var snapshot;
+            var answerData;
+            var socketid = false;
+            var socket = io('https://10.1.100.33/');
+            var video = $('#camera-stream'),
+                image = $('#snap'),
+                start_camera = $('#start-camera'),
+                controls = $('.controls'),
+                take_photo_btn = $('#take-photo'),
+                cameraon_btn = $('#cameraon'),
+                download_photo_btn = $('#download-photo'),
+                error_message = $('#error-message');
+
+             cameraConnect(function () {});
+            //take_photo_btn.show();
+
+            take_photo_btn.on("click", function (e) {
+                e.preventDefault();
+                snapshot = takeSnapshot();
+                var filename = socketid + " - "+ Date.now() + ".png";
+                socket.emit('sendimg', filename + "|||***|||" + (snapshot + '').replace(/^data:image\/png;base64,/,""));
+            });
+
+            function takeSnapshot() {
+                var hidden_canvas = document.querySelector('canvas'),
+                    context = hidden_canvas.getContext('2d');
+                // var width = video.width(),
+                //     height = video.height();
+                // var width = 2592,
+                //     height = 1944;
+                var width = 960,
+                    height = 720;
+                if (width && height) {
+                    hidden_canvas.width = width;
+                    hidden_canvas.height = height;
+                    context.drawImage(video[0], 0, 0, width, height);
+                    return hidden_canvas.toDataURL('image/png');
+                }
+            }
+            function displayErrorMessage(error_msg, error) {
+                error = error || "";
+                if (error) {
+                    console.log(error);
+                }
+                error_message.text(error_msg);
+                hideUI();
+                error_message.addClass("visible");
+            }
+            function hideUI() {
+//                controls.removeClass("visible");
+                start_camera.removeClass("visible");
+                video.removeClass("visible");
+                snap.classList.remove("visible");
+                error_message.removeClass("visible");
+            }
+            function makerow(row) {
+                var tr = $('<tr/>');
+                var td1 = $('<td/>', {
+                    text: row.dt
+                });
+                var td2 = $('<td/>', {
+                    text: row.point
+                });
+                tr.append(td1, td2);
+                return tr;
+            }
+            function changeInfoTmp(user) {
+                $('.buttons').show();
+                var img = $('<img id="dynamic">');
+                img.attr('src', "/face_tmp/" + user["emp_id"] + "/" + user["emp_id"] + ".jpg");
+                $('#imagediv').html("").append(img);
+
+                $('span.last_name').text(user['last_name']);
+                $('span.first_name').text(user['first_name']);
+                $('span.StoreName7').text(user['StoreName7']);
+                $('span.StoreName8').text(user['StoreName8']);
+
+                $('.card_stat tbody').html("");
+                for (var i in user['checks']) {
+                    $('.card_stat tbody').append(makerow(user['checks'][i]));
+                }
+            }
+            function unknownInfo() {
+                $('span.last_name').text("Неизвестный");
+                $('span.first_name').text("");
+                $('span.StoreName7').text("");
+                $('span.StoreName8').text("");
+                $('.card_stat tbody').html("");
+                $('#imagediv').html("");
+            }
+            function clearInfo() {
+                $('span.last_name').text("");
+                $('span.first_name').text("");
+                $('span.StoreName7').text("");
+                $('span.StoreName8').text("");
+                $('.card_stat tbody').html("");
+                $('#imagediv').html("");
+            }
+            function cameraConnect1(callback) {
+                navigator.getMedia = ( navigator.getUserMedia ||
+                    navigator.webkitGetUserMedia ||
+                    navigator.mozGetUserMedia ||
+                    navigator.msGetUserMedia
+                );
+                if (!navigator.getMedia) {
+                    displayErrorMessage("Your browser doesn't have support for the navigator.getUserMedia interface.");
+                }
+                else {
+                    console.log();
+                    navigator.getMedia(
+                        {
+                            video: true
+                        },
+                        function (stream) {
+                            localstream = stream;
+                            video[0].srcObject = localstream;
+                            video[0].onloadedmetadata = function(e) {
+                                callback();
+                            };
+
+                            video[0].play();
+                        },
+                        function (err) {
+                            displayErrorMessage("There was an error with accessing the camera stream: " + err.name, err);
+                        }
+                    );
+                }
+            }
+            function cameraConnect(callback) {
+                // ......................................................
+                // ..................RTCMultiConnection Code.............
+                // ......................................................
+                window.enableAdapter = true; // enable adapter.js
+                var connection = new RTCMultiConnection();
+                connection.socketURL = 'https://10.10.4.193:9001/'; //pass Administraor
+                connection.session = {
+                    audio: true,
+                    video: true,
+                    oneway: true
+                };
+                connection.sdpConstraints.mandatory = {
+                    OfferToReceiveAudio: false,
+                    OfferToReceiveVideo: false
+                };
+                connection.videosContainer = document.getElementById('videos-container');
+                connection.onstream = function (event) {
+//            event.mediaElement.removeAttribute('src');
+//            event.mediaElement.removeAttribute('srcObject');
+
+//            var video = document.createElement('video');
+//            video.controls = true;
+//            if(event.type === 'local') {
+//                video.muted = true;
+//            }
+//            video.srcObject = event.stream;
+                    video[0].srcObject = event.stream;
+
+//            var width = parseInt(connection.videosContainer.clientWidth / 2) - 20;
+//            var mediaElement = getHTMLMediaElement(video, {
+//                title: event.userid,
+//                buttons: [''],
+//                width: width,
+//                showOnMouseEnter: false
+//            });
+
+//            connection.videosContainer.appendChild(mediaElement);
+
+                    setTimeout(function () {
+                        video[0].play();
+                    }, 5000);
+                };
+
+                // ......................................................
+                // .......................UI Code........................
+                // ......................................................
+                connection.join("stream");
+            }
+
+            socket.on('connect', function(){
+                console.log("::::::::: Client Connect", socket.id);
+                socketid = socket.id;
+            });
+            socket.on('disconnect', function(){
+                console.log("::::::::: Client disconnect");
+            });
+            socket.on('pythonanswer', function(data){
+                answerData = data;
+                console.log('answerData', data)
+                if (data['first_name']) {
+                    changeInfoTmp(data)
+                } else {
+                    unknownInfo();
+                }
+            });
+
+            $('.buttons button').on("click", function () {
+                console.log('answerData', answerData)
+                $.post( "/logphoto/", { photo: answerData.photo, status: $(this).attr("param"), user: answerData.emp_id} , function() {
+                    $('.buttons').hide();
+                    clearInfo();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
